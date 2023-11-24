@@ -13,6 +13,14 @@ from render import Render
 from dataset import get_dataloader
 from model.losses import VAELoss, div_loss
 
+import wandb
+
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="react-baseline",
+    
+)
+
 def parse_arg():
     parser = argparse.ArgumentParser(description='PyTorch Training')
     # Param
@@ -44,6 +52,7 @@ def parse_arg():
     parser.add_argument('--gpu-ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
     parser.add_argument('--kl-p', default=0.0002, type=float, help="hyperparameter for kl-loss")
     parser.add_argument('--div-p', default=10, type=float, help="hyperparameter for div-loss")
+    parser.add_argument('--val_epoch', default=1, type=int, help="val step")
 
     args = parser.parse_args()
     return args
@@ -77,6 +86,8 @@ def train(args, model, train_loader, optimizer, criterion):
         rec_losses.update(rec_loss.data.item(), speaker_video_clip.size(0))
         kld_losses.update(kld_loss.data.item(), speaker_video_clip.size(0))
         div_losses.update(d_loss.data.item(), speaker_video_clip.size(0))
+        
+        wandb.log({"train_loss": loss.data.item(), "train_rec_loss": rec_loss.data.item(), "train_kld_loss": kld_loss.data.item(), "train_div_loss": d_loss.data.item()})
 
         loss.backward()
         optimizer.step()
@@ -92,6 +103,9 @@ def val(args, model, val_loader, criterion, render, epoch):
     kld_losses = AverageMeter()
     model.eval()
     model.reset_window_size(8)
+    
+    # breakpoint()
+    
     for batch_idx, (speaker_video_clip, speaker_audio_clip, _, _, _, _, listener_emotion, listener_3dmm, listener_references) in enumerate(tqdm(val_loader)):
         if torch.cuda.is_available():
             speaker_video_clip, speaker_audio_clip, listener_emotion, listener_3dmm, listener_references = \
@@ -149,7 +163,7 @@ def main(args):
     for epoch in range(start_epoch, args.epochs):
         train_loss, rec_loss, kld_loss, div_loss = train(args, model, train_loader, optimizer, criterion)
         print("Epoch:  {}   train_loss: {:.5f}   train_rec_loss: {:.5f}  train_kld_loss: {:.5f} train_div_loss: {:.5f}".format(epoch+1, train_loss, rec_loss, kld_loss, div_loss))
-        if (epoch+1) % 10 == 0:
+        if (epoch+1) % args.val_epoch == 0:
             val_loss, rec_loss, kld_loss = val(args, model, val_loader, criterion, render, epoch)
             print("Epoch:  {}   val_loss: {:.5f}   val_rec_loss: {:.5f}  val_kld_loss: {:.5f} ".format(epoch+1, val_loss, rec_loss, kld_loss))
             if val_loss < lowest_val_loss:
@@ -178,7 +192,11 @@ def main(args):
 
 
 if __name__=="__main__":
+    
     args = parse_arg()
+    
+    args.dataset_path = "/home/tien/playground_facereconstruction/data/react_2024"
+    
     os.environ["NUMEXPR_MAX_THREADS"] = '16'
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     main(args)

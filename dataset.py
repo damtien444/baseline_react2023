@@ -191,6 +191,8 @@ class ReactionDataset(data.Dataset):
         # ========================= Load Speaker & Listener video clip ==========================
         speaker_video_path = data[f'{speaker_prefix}_video_path']
         listener_video_path = data[f'{listener_prefix}_video_path']
+        
+        # breakpoint()
 
         img_paths = os.listdir(speaker_video_path)
         total_length = len(img_paths)
