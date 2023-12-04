@@ -7,9 +7,17 @@ from .ModelRenderer import ModelRenderer
 from pytorch3d.structures import Meshes
 from pytorch3d.renderer import TexturesVertex
 
+
 class FaceVerseModel(nn.Module):
-    def __init__(self, model_dict, batch_size=1,
-                 focal=1315, img_size=256, use_simplification=False, device='cuda:0'):
+    def __init__(
+        self,
+        model_dict,
+        batch_size=1,
+        focal=1315,
+        img_size=256,
+        use_simplification=False,
+        device="cuda:0",
+    ):
         super(FaceVerseModel, self).__init__()
 
         self.focal = focal
@@ -20,41 +28,137 @@ class FaceVerseModel(nn.Module):
         self.p_mat = self._get_p_mat(device)
         self.reverse_z = self._get_reverse_z(device)
         self.camera_pos = self._get_camera_pose(device)
-        self.rotXYZ = torch.eye(3).view(1, 3, 3).repeat(3, 1, 1).view(3, 1, 3, 3).to(self.device)
+        self.rotXYZ = (
+            torch.eye(3).view(1, 3, 3).repeat(3, 1, 1).view(3, 1, 3, 3).to(self.device)
+        )
 
         self.renderer = ModelRenderer(self.focal, self.img_size, self.device)
-        
+
         if use_simplification:
-            self.select_id = model_dict['select_id']
-            self.select_id_tris = np.vstack((self.select_id * 3, self.select_id * 3 + 1, self.select_id * 3 + 2)).transpose().flatten()
-            self.skinmask = torch.tensor(model_dict['skinmask_select'], requires_grad=False, device=self.device)
+            self.select_id = model_dict["select_id"]
+            self.select_id_tris = (
+                np.vstack(
+                    (self.select_id * 3, self.select_id * 3 + 1, self.select_id * 3 + 2)
+                )
+                .transpose()
+                .flatten()
+            )
+            self.skinmask = torch.tensor(
+                model_dict["skinmask_select"], requires_grad=False, device=self.device
+            )
 
-            self.kp_inds = torch.tensor(model_dict['keypoints_select'].reshape(-1, 1), requires_grad=False).squeeze().long().to(self.device)
+            self.kp_inds = (
+                torch.tensor(
+                    model_dict["keypoints_select"].reshape(-1, 1), requires_grad=False
+                )
+                .squeeze()
+                .long()
+                .to(self.device)
+            )
 
-            self.meanshape = torch.tensor(model_dict['meanshape'].reshape(1, -1)[:, self.select_id_tris], dtype=torch.float32, requires_grad=False, device=self.device)
-            self.meantex = torch.tensor(model_dict['meantex'].reshape(1, -1)[:, self.select_id_tris], dtype=torch.float32, requires_grad=False, device=self.device)
+            self.meanshape = torch.tensor(
+                model_dict["meanshape"].reshape(1, -1)[:, self.select_id_tris],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.meantex = torch.tensor(
+                model_dict["meantex"].reshape(1, -1)[:, self.select_id_tris],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
 
-            self.idBase = torch.tensor(model_dict['idBase'][self.select_id_tris], dtype=torch.float32, requires_grad=False, device=self.device)
-            self.expBase = torch.tensor(model_dict['exBase'][self.select_id_tris], dtype=torch.float32, requires_grad=False, device=self.device)
-            self.texBase = torch.tensor(model_dict['texBase'][self.select_id_tris], dtype=torch.float32, requires_grad=False, device=self.device)
+            self.idBase = torch.tensor(
+                model_dict["idBase"][self.select_id_tris],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.expBase = torch.tensor(
+                model_dict["exBase"][self.select_id_tris],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.texBase = torch.tensor(
+                model_dict["texBase"][self.select_id_tris],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
 
-            self.tri = torch.tensor(model_dict['tri_select'], dtype=torch.int64, requires_grad=False, device=self.device)
-            self.point_buf = torch.tensor(model_dict['point_buf_select'], dtype=torch.int64, requires_grad=False, device=self.device)
-        
+            self.tri = torch.tensor(
+                model_dict["tri_select"],
+                dtype=torch.int64,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.point_buf = torch.tensor(
+                model_dict["point_buf_select"],
+                dtype=torch.int64,
+                requires_grad=False,
+                device=self.device,
+            )
+
         else:
-            self.skinmask = torch.tensor(model_dict['skinmask'], requires_grad=False, device=self.device)
+            self.skinmask = torch.tensor(
+                model_dict["skinmask"], requires_grad=False, device=self.device
+            )
 
-            self.kp_inds = torch.tensor(model_dict['keypoints'].reshape(-1, 1), requires_grad=False).squeeze().long().to(self.device)
+            self.kp_inds = (
+                torch.tensor(
+                    model_dict["keypoints"].reshape(-1, 1), requires_grad=False
+                )
+                .squeeze()
+                .long()
+                .to(self.device)
+            )
 
-            self.meanshape = torch.tensor(model_dict['meanshape'].reshape(1, -1), dtype=torch.float32, requires_grad=False, device=self.device)
-            self.meantex = torch.tensor(model_dict['meantex'].reshape(1, -1), dtype=torch.float32, requires_grad=False, device=self.device)
+            self.meanshape = torch.tensor(
+                model_dict["meanshape"].reshape(1, -1),
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.meantex = torch.tensor(
+                model_dict["meantex"].reshape(1, -1),
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
 
-            self.idBase = torch.tensor(model_dict['idBase'], dtype=torch.float32, requires_grad=False, device=self.device)
-            self.expBase = torch.tensor(model_dict['exBase'], dtype=torch.float32, requires_grad=False, device=self.device)
-            self.texBase = torch.tensor(model_dict['texBase'], dtype=torch.float32, requires_grad=False, device=self.device)
+            self.idBase = torch.tensor(
+                model_dict["idBase"],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.expBase = torch.tensor(
+                model_dict["exBase"],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.texBase = torch.tensor(
+                model_dict["texBase"],
+                dtype=torch.float32,
+                requires_grad=False,
+                device=self.device,
+            )
 
-            self.tri = torch.tensor(model_dict['tri'], dtype=torch.int64, requires_grad=False, device=self.device)
-            self.point_buf = torch.tensor(model_dict['point_buf'], dtype=torch.int64, requires_grad=False, device=self.device)
+            self.tri = torch.tensor(
+                model_dict["tri"],
+                dtype=torch.int64,
+                requires_grad=False,
+                device=self.device,
+            )
+            self.point_buf = torch.tensor(
+                model_dict["point_buf"],
+                dtype=torch.int64,
+                requires_grad=False,
+                device=self.device,
+            )
 
         self.num_vertex = self.meanshape.shape[1] // 3
         self.id_dims = self.idBase.shape[1]
@@ -63,39 +167,64 @@ class FaceVerseModel(nn.Module):
         self.all_dims = self.id_dims + self.tex_dims + self.exp_dims
 
         self.init_coeff_tensors()
-        
+
         # for tracking by landmarks
-        self.kp_inds_view = torch.cat([self.kp_inds[:, None] * 3, self.kp_inds[:, None] * 3 + 1, self.kp_inds[:, None] * 3 + 2], dim=1).flatten()
+        self.kp_inds_view = torch.cat(
+            [
+                self.kp_inds[:, None] * 3,
+                self.kp_inds[:, None] * 3 + 1,
+                self.kp_inds[:, None] * 3 + 2,
+            ],
+            dim=1,
+        ).flatten()
         self.idBase_view = self.idBase[self.kp_inds_view, :].detach().clone()
         self.expBase_view = self.expBase[self.kp_inds_view, :].detach().clone()
         self.meanshape_view = self.meanshape[:, self.kp_inds_view].detach().clone()
 
     def init_coeff_tensors(self):
         self.id_tensor = torch.zeros(
-            (self.batch_size, self.id_dims), dtype=torch.float32,
-            requires_grad=True, device=self.device)
+            (self.batch_size, self.id_dims),
+            dtype=torch.float32,
+            requires_grad=True,
+            device=self.device,
+        )
 
         self.tex_tensor = torch.zeros(
-            (self.batch_size, self.tex_dims), dtype=torch.float32,
-            requires_grad=True, device=self.device)
+            (self.batch_size, self.tex_dims),
+            dtype=torch.float32,
+            requires_grad=True,
+            device=self.device,
+        )
 
         self.exp_tensor = torch.zeros(
-            (self.batch_size, self.exp_dims), dtype=torch.float32,
-            requires_grad=True, device=self.device)
-    
+            (self.batch_size, self.exp_dims),
+            dtype=torch.float32,
+            requires_grad=True,
+            device=self.device,
+        )
+
         self.gamma_tensor = torch.zeros(
-            (self.batch_size, 27), dtype=torch.float32,
-            requires_grad=True, device=self.device)
-    
+            (self.batch_size, 27),
+            dtype=torch.float32,
+            requires_grad=True,
+            device=self.device,
+        )
+
         self.trans_tensor = torch.zeros(
-            (self.batch_size, 3), dtype=torch.float32,
-            requires_grad=False, device=self.device)
+            (self.batch_size, 3),
+            dtype=torch.float32,
+            requires_grad=False,
+            device=self.device,
+        )
         self.trans_tensor[:, 2] += 6
         self.trans_tensor.requires_grad = True
-    
+
         self.rot_tensor = torch.zeros(
-            (self.batch_size, 3), dtype=torch.float32,
-            requires_grad=False, device=self.device)
+            (self.batch_size, 3),
+            dtype=torch.float32,
+            requires_grad=False,
+            device=self.device,
+        )
         self.rot_tensor[:, 0] += math.pi
         self.rot_tensor.requires_grad = True
 
@@ -104,17 +233,27 @@ class FaceVerseModel(nn.Module):
         return lms
 
     def split_coeffs(self, coeffs):
-        id_coeff = coeffs[:, :self.id_dims]  # identity(shape) coeff 
-        exp_coeff = coeffs[:, self.id_dims:self.id_dims+self.exp_dims]  # expression coeff 
-        tex_coeff = coeffs[:, self.id_dims+self.exp_dims:self.all_dims]  # texture(albedo) coeff 
-        angles = coeffs[:, self.all_dims:self.all_dims+3] # ruler angles(x,y,z) for rotation of dim 3
-        gamma = coeffs[:, self.all_dims+3:self.all_dims+30] # lighting coeff for 3 channel SH function of dim 27
-        translation = coeffs[:, self.all_dims+30:]  # translation coeff of dim 3
+        id_coeff = coeffs[:, : self.id_dims]  # identity(shape) coeff
+        exp_coeff = coeffs[
+            :, self.id_dims : self.id_dims + self.exp_dims
+        ]  # expression coeff
+        tex_coeff = coeffs[
+            :, self.id_dims + self.exp_dims : self.all_dims
+        ]  # texture(albedo) coeff
+        angles = coeffs[
+            :, self.all_dims : self.all_dims + 3
+        ]  # ruler angles(x,y,z) for rotation of dim 3
+        gamma = coeffs[
+            :, self.all_dims + 3 : self.all_dims + 30
+        ]  # lighting coeff for 3 channel SH function of dim 27
+        translation = coeffs[:, self.all_dims + 30 :]  # translation coeff of dim 3
 
         return id_coeff, exp_coeff, tex_coeff, angles, gamma, translation
 
     def merge_coeffs(self, id_coeff, exp_coeff, tex_coeff, angles, gamma, translation):
-        coeffs = torch.cat([id_coeff, exp_coeff, tex_coeff, angles, gamma, translation], dim=1)
+        coeffs = torch.cat(
+            [id_coeff, exp_coeff, tex_coeff, angles, gamma, translation], dim=1
+        )
         return coeffs
 
     def merge_coeffs2(self, exp_coeff, angles, translation):
@@ -122,20 +261,22 @@ class FaceVerseModel(nn.Module):
         return coeffs
 
     def get_packed_tensors(self):
-        return self.merge_coeffs(self.id_tensor,
-                                 self.exp_tensor,
-                                 self.tex_tensor,
-                                 self.rot_tensor, self.gamma_tensor,
-                                 self.trans_tensor)
+        return self.merge_coeffs(
+            self.id_tensor,
+            self.exp_tensor,
+            self.tex_tensor,
+            self.rot_tensor,
+            self.gamma_tensor,
+            self.trans_tensor,
+        )
 
     def get_packed_tensors2(self):
-        return self.merge_coeffs2(
-                                 self.exp_tensor,
-                                 self.rot_tensor,
-                                 self.trans_tensor)
+        return self.merge_coeffs2(self.exp_tensor, self.rot_tensor, self.trans_tensor)
 
     def forward(self, coeffs, render=True, texture=True):
-        id_coeff, exp_coeff, tex_coeff, angles, gamma, translation = self.split_coeffs(coeffs)
+        id_coeff, exp_coeff, tex_coeff, angles, gamma, translation = self.split_coeffs(
+            coeffs
+        )
         rotation = self.compute_rotation_matrix(angles)
 
         if render:
@@ -145,7 +286,8 @@ class FaceVerseModel(nn.Module):
             lms_t = self.get_lms(vs_t)
             lms_proj = self.project_vs(lms_t)
             lms_proj = torch.stack(
-                [lms_proj[:, :, 0], self.img_size-lms_proj[:, :, 1]], dim=2)
+                [lms_proj[:, :, 0], self.img_size - lms_proj[:, :, 1]], dim=2
+            )
             face_texture = self.get_color(tex_coeff)
             face_norm = self.compute_norm(vs, self.tri, self.point_buf)
             face_norm_r = face_norm.bmm(rotation)
@@ -153,43 +295,55 @@ class FaceVerseModel(nn.Module):
 
             if texture:
                 face_color_tv = TexturesVertex(face_color)
-                mesh = Meshes(vs_t, self.tri.repeat(self.batch_size, 1, 1), face_color_tv)
+                mesh = Meshes(
+                    vs_t, self.tri.repeat(self.batch_size, 1, 1), face_color_tv
+                )
                 rendered_img = self.renderer.alb_renderer(mesh)
             else:
                 face_color_tv = TexturesVertex(face_color * 0 + 200)
-                mesh = Meshes(vs_t, self.tri.repeat(self.batch_size, 1, 1), face_color_tv)
+                mesh = Meshes(
+                    vs_t, self.tri.repeat(self.batch_size, 1, 1), face_color_tv
+                )
                 rendered_img = self.renderer.sha_renderer(mesh)
 
-            return {'rendered_img': rendered_img,
-                    'lms_proj': lms_proj,
-                    'face_texture': face_texture,
-                    'vs': vs_t,
-                    'tri': self.tri,
-                    'color': face_color}
+            return {
+                "rendered_img": rendered_img,
+                "lms_proj": lms_proj,
+                "face_texture": face_texture,
+                "vs": vs_t,
+                "tri": self.tri,
+                "color": face_color,
+            }
         else:
             lms = self.get_vs_lms(id_coeff, exp_coeff)
-            lms_t = self.rigid_transform(
-                lms, rotation, translation)
+            lms_t = self.rigid_transform(lms, rotation, translation)
 
             lms_proj = self.project_vs(lms_t)
             lms_proj = torch.stack(
-                [lms_proj[:, :, 0], self.img_size-lms_proj[:, :, 1]], dim=2)
-            return {'lms_proj': lms_proj}
+                [lms_proj[:, :, 0], self.img_size - lms_proj[:, :, 1]], dim=2
+            )
+            return {"lms_proj": lms_proj}
 
     def get_vs(self, id_coeff, exp_coeff):
-        face_shape = torch.einsum('ij,aj->ai', self.idBase, id_coeff) + \
-            torch.einsum('ij,aj->ai', self.expBase, exp_coeff) + self.meanshape
+        face_shape = (
+            torch.einsum("ij,aj->ai", self.idBase, id_coeff)
+            + torch.einsum("ij,aj->ai", self.expBase, exp_coeff)
+            + self.meanshape
+        )
         face_shape = face_shape.view(self.batch_size, -1, 3)
         return face_shape
 
     def get_vs_lms(self, id_coeff, exp_coeff):
-        face_shape = torch.einsum('ij,aj->ai', self.idBase_view, id_coeff) + \
-            torch.einsum('ij,aj->ai', self.expBase_view, torch.abs(exp_coeff)) + self.meanshape_view
+        face_shape = (
+            torch.einsum("ij,aj->ai", self.idBase_view, id_coeff)
+            + torch.einsum("ij,aj->ai", self.expBase_view, torch.abs(exp_coeff))
+            + self.meanshape_view
+        )
         face_shape = face_shape.view(self.batch_size, -1, 3)
         return face_shape
 
     def get_color(self, tex_coeff):
-        face_texture = torch.einsum('ij,aj->ai', self.texBase, tex_coeff) + self.meantex
+        face_texture = torch.einsum("ij,aj->ai", self.texBase, tex_coeff) + self.meantex
         face_texture = face_texture.view(self.batch_size, -1, 3)
         return face_texture
 
@@ -202,13 +356,26 @@ class FaceVerseModel(nn.Module):
 
     def _get_p_mat(self, device):
         half_image_width = self.img_size // 2
-        p_matrix = np.array([self.focal, 0.0, half_image_width,
-                             0.0, self.focal, half_image_width,
-                             0.0, 0.0, 1.0], dtype=np.float32).reshape(1, 3, 3)
+        p_matrix = np.array(
+            [
+                self.focal,
+                0.0,
+                half_image_width,
+                0.0,
+                self.focal,
+                half_image_width,
+                0.0,
+                0.0,
+                1.0,
+            ],
+            dtype=np.float32,
+        ).reshape(1, 3, 3)
         return torch.tensor(p_matrix, device=device)
 
     def _get_reverse_z(self, device):
-        reverse_z = np.reshape(np.array([1.0, 0, 0, 0, 1, 0, 0, 0, -1.0], dtype=np.float32), [1, 3, 3])
+        reverse_z = np.reshape(
+            np.array([1.0, 0, 0, 0, 1, 0, 0, 0, -1.0], dtype=np.float32), [1, 3, 3]
+        )
         return torch.tensor(reverse_z, device=device)
 
     def compute_norm(self, vs, tri, point_buf):
@@ -227,9 +394,16 @@ class FaceVerseModel(nn.Module):
         return v_norm
 
     def project_vs(self, vs):
-        vs = torch.matmul(vs, self.reverse_z.repeat((self.batch_size, 1, 1))) + self.camera_pos
-        aug_projection = torch.matmul(vs, self.p_mat.repeat((self.batch_size, 1, 1)).permute((0, 2, 1)))
-        face_projection = aug_projection[:, :, :2] / torch.reshape(aug_projection[:, :, 2], [self.batch_size, -1, 1])
+        vs = (
+            torch.matmul(vs, self.reverse_z.repeat((self.batch_size, 1, 1)))
+            + self.camera_pos
+        )
+        aug_projection = torch.matmul(
+            vs, self.p_mat.repeat((self.batch_size, 1, 1)).permute((0, 2, 1))
+        )
+        face_projection = aug_projection[:, :, :2] / torch.reshape(
+            aug_projection[:, :, 2], [self.batch_size, -1, 1]
+        )
         return face_projection
 
     def compute_rotation_matrix(self, angles):
@@ -244,7 +418,7 @@ class FaceVerseModel(nn.Module):
             rotXYZ = self.rotXYZ.repeat(1, self.batch_size, 1, 1)
         else:
             rotXYZ = self.rotXYZ.detach().clone()
-        
+
         rotXYZ[0, :, 1, 1] = cosx
         rotXYZ[0, :, 1, 2] = -sinx
         rotXYZ[0, :, 2, 1] = sinx
@@ -318,4 +492,3 @@ class FaceVerseModel(nn.Module):
 
     def get_gamma_tensor(self):
         return self.gamma_tensor
-

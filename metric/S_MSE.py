@@ -13,6 +13,8 @@ def compute_s_mse(preds):
             return 0.0
         preds_item_ = preds_item.reshape(preds_item.shape[0], -1)
         dist_ = torch.pow(torch.cdist(preds_item_, preds_item_), 2)
-        dist_ = torch.sum(dist_) / (preds_item.shape[0] * (preds_item.shape[0] - 1) * preds_item_.shape[1])
+        dist_ = torch.sum(dist_) / (
+            preds_item.shape[0] * (preds_item.shape[0] - 1) * preds_item_.shape[1]
+        )
         dist += dist_
     return dist / preds.shape[0]

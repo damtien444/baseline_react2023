@@ -12,23 +12,38 @@ def _func(k_neighbour_matrix, k_pred, em=None):
     for i in range(k_pred.shape[0]):
         dwt_list = []
         for n_index in range(neighbour_index_len):
+            
+            if neighbour_index[n_index] > len(em) - 1:
+                continue
+            
             emotion = em[neighbour_index[n_index]]
             res = 0
             for st, ed, weight in [(0, 15, 1 / 15), (15, 17, 1), (17, 25, 1 / 8)]:
-                res += weight * dtw(k_pred[i].astype(np.float32)[:, st: ed], emotion.astype(np.float32)[:, st: ed])
+                res += weight * dtw(
+                    k_pred[i].astype(np.float32)[:, st:ed],
+                    emotion.astype(np.float32)[:, st:ed],
+                )
             dwt_list.append(res)
+        
+        if len(dwt_list) == 0:
+            continue
+        
         min_dwt_sum += min(dwt_list)
     return min_dwt_sum
 
 
-def compute_FRD_mp(args, pred, em, val_test='val', p=4):
+def compute_FRD_mp(args, pred, em, val_test="val", p=4):
     # pred: N 10 750 25
     # speaker: N 750 25
 
-    if val_test == 'val':
-        neighbour_matrix = np.load(os.path.join(args.dataset_path, 'neighbour_emotion_val.npy'))
+    if val_test == "val":
+        neighbour_matrix = np.load(
+            os.path.join(args.dataset_path, "neighbour_emotion_val.npy")
+        )
     else:
-        neighbour_matrix = np.load(os.path.join(args.dataset_path, 'neighbour_emotion_test.npy'))
+        neighbour_matrix = np.load(
+            os.path.join(args.dataset_path, "neighbour_emotion_test.npy")
+        )
 
     FRD_list = []
     with mp.Pool(processes=p) as pool:
@@ -39,26 +54,41 @@ def compute_FRD_mp(args, pred, em, val_test='val', p=4):
     return np.mean(FRD_list)
 
 
-
-def compute_FRD(args, pred, listener_em, val_test='val'):
-    if val_test == 'val':
-        speaker_neighbour_matrix = np.load(os.path.join(args.dataset_path, 'neighbour_emotion_val.npy'))
+def compute_FRD(args, pred, listener_em, val_test="val"):
+    if val_test == "val":
+        speaker_neighbour_matrix = np.load(
+            os.path.join(args.dataset_path, "neighbour_emotion_val.npy")
+        )
     else:
-        speaker_neighbour_matrix = np.load(os.path.join(args.dataset_path, 'neighbour_emotion_test.npy'))
+        speaker_neighbour_matrix = np.load(
+            os.path.join(args.dataset_path, "neighbour_emotion_test.npy")
+        )
     all_FRD_list = []
     for i in range(pred.shape[1]):
         FRD_list = []
         for k in range(pred.shape[0]):
-            speaker_neighbour_index = np.argwhere(speaker_neighbour_matrix[k] == 1).reshape(-1)
+            speaker_neighbour_index = np.argwhere(
+                speaker_neighbour_matrix[k] == 1
+            ).reshape(-1)
             speaker_neighbour_index_len = len(speaker_neighbour_index)
             dwt_list = []
             for n_index in range(speaker_neighbour_index_len):
-                emotion =  listener_em[speaker_neighbour_index[n_index]]
+                
+                if speaker_neighbour_index[n_index] > len(listener_em) - 1:
+                    continue
+                
+                emotion = listener_em[speaker_neighbour_index[n_index]]
                 res = 0
                 for st, ed, weight in [(0, 15, 1 / 15), (15, 17, 1), (17, 25, 1 / 8)]:
-                    res += weight * dtw(pred[k, i].numpy().astype(np.float32)[:, st: ed],
-                                        emotion.numpy().astype(np.float32)[:, st: ed])
+                    res += weight * dtw(
+                        pred[k, i].numpy().astype(np.float32)[:, st:ed],
+                        emotion.numpy().astype(np.float32)[:, st:ed],
+                    )
                 dwt_list.append(res)
+            
+            if len(dwt_list) == 0:
+                continue    
+            
             min_dwt = min(dwt_list)
             FRD_list.append(min_dwt)
         all_FRD_list.append(np.mean(FRD_list))

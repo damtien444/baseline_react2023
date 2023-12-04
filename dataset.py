@@ -6,7 +6,7 @@ import copy
 import numpy as np
 import pickle
 from tqdm import tqdm
-import random,math
+import random, math
 import time
 import pandas as pd
 from PIL import Image
@@ -16,8 +16,10 @@ from torch.utils.data import DataLoader
 from multiprocessing import Pool
 import torchaudio
 from scipy.io import loadmat
+
 torchaudio.set_audio_backend("sox_io")
 from functools import cmp_to_key
+import pytorch_lightning as pl
 
 
 class Transform(object):
@@ -26,22 +28,23 @@ class Transform(object):
         self.crop_size = crop_size
 
     def __call__(self, img):
-        normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                         std=[0.5, 0.5, 0.5])
-        transform = transforms.Compose([
-            transforms.Resize(self.img_size),
-            transforms.CenterCrop(self.crop_size),
-            transforms.ToTensor(),
-            normalize
-        ])
+        normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        transform = transforms.Compose(
+            [
+                transforms.Resize(self.img_size),
+                transforms.CenterCrop(self.crop_size),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        )
         img = transform(img)
         return img
 
 
 def pil_loader(path):
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         with Image.open(f) as img:
-            return img.convert('RGB')
+            return img.convert("RGB")
 
 
 def extract_video_features(video_path, img_transform):
@@ -74,12 +77,22 @@ def extract_audio_features(audio_path, fps, n_frames):
     shifted_n_samples = 0
     curr_feats = []
     for i in range(n_frames):
-        curr_samples = audio[i*frame_n_samples:shifted_n_samples + i*frame_n_samples + frame_n_samples]
-        curr_mfcc = torchaudio.compliance.kaldi.mfcc(torch.from_numpy(curr_samples).float().view(1, -1), sample_frequency=sr, use_energy=True)
-        curr_mfcc = curr_mfcc.transpose(0, 1) # (freq, time)
+        curr_samples = audio[
+            i * frame_n_samples : shifted_n_samples
+            + i * frame_n_samples
+            + frame_n_samples
+        ]
+        curr_mfcc = torchaudio.compliance.kaldi.mfcc(
+            torch.from_numpy(curr_samples).float().view(1, -1),
+            sample_frequency=sr,
+            use_energy=True,
+        )
+        curr_mfcc = curr_mfcc.transpose(0, 1)  # (freq, time)
         curr_mfcc_d = torchaudio.functional.compute_deltas(curr_mfcc)
         curr_mfcc_dd = torchaudio.functional.compute_deltas(curr_mfcc_d)
-        curr_mfccs = np.stack((curr_mfcc.numpy(), curr_mfcc_d.numpy(), curr_mfcc_dd.numpy())).reshape(-1)
+        curr_mfccs = np.stack(
+            (curr_mfcc.numpy(), curr_mfcc_d.numpy(), curr_mfcc_dd.numpy())
+        ).reshape(-1)
         curr_feat = curr_mfccs
         # rms = librosa.feature.rms(curr_samples, sr).reshape(-1)
         # zcr = librosa.feature.zero_crossing_rate(curr_samples, sr).reshape(-1)
@@ -191,8 +204,6 @@ class ReactionDataset(data.Dataset):
         # ========================= Load Speaker & Listener video clip ==========================
         speaker_video_path = data[f'{speaker_prefix}_video_path']
         listener_video_path = data[f'{listener_prefix}_video_path']
-        
-        # breakpoint()
 
         img_paths = os.listdir(speaker_video_path)
         total_length = len(img_paths)
@@ -271,15 +282,131 @@ class ReactionDataset(data.Dataset):
         return self._len
 
 
-def get_dataloader(conf, split, load_audio=False, load_video_s=False, load_video_l=False, load_emotion_s=False,
-                   load_emotion_l=False, load_3dmm_s=False, load_3dmm_l=False, load_ref=False, repeat_mirrored=True):
+class ReactDataModule(pl.LightningDataModule):
+    def __init__(self, conf):
+        super().__init__()
+        self.conf = conf
+
+    def setup(self, stage=None):
+        # train_loader = get_dataloader(args, "train", load_audio=True, load_video_s=True,  load_emotion_l=True,  load_3dmm_l=True)
+        # val_loader = get_dataloader(args, "val", load_audio=True, load_video_s=True,  load_emotion_l=True, load_3dmm_l=True, load_ref=True)
+
+        self.train_ds = ReactionDataset(
+            self.conf.dataset_path,
+            "train",
+            img_size=self.conf.img_size,
+            crop_size=self.conf.crop_size,
+            clip_length=self.conf.clip_length,
+            load_audio=True,
+            load_video_s=True,
+            load_video_l=False,
+            load_emotion_s=False,
+            load_emotion_l=True,
+            load_3dmm_s=False,
+            load_3dmm_l=True,
+            load_ref=False,
+            repeat_mirrored=True,
+        )
+
+        self.val_ds = ReactionDataset(
+            self.conf.dataset_path,
+            "val",
+            img_size=self.conf.img_size,
+            crop_size=self.conf.crop_size,
+            clip_length=self.conf.clip_length,
+            load_audio=True,
+            load_video_s=True,
+            load_video_l=True,
+            load_emotion_s=True,
+            load_emotion_l=True,
+            load_3dmm_s=True,
+            load_3dmm_l=True,
+            load_ref=True,
+            repeat_mirrored=True,
+        )
+        
+        self.test_ds = ReactionDataset(
+            self.conf.dataset_path,
+            "val",
+            img_size=self.conf.img_size,
+            crop_size=self.conf.crop_size,
+            clip_length=self.conf.clip_length,
+            load_audio=True,
+            load_video_s=True,
+            load_video_l=True,
+            load_emotion_s=True,
+            load_emotion_l=True,
+            load_3dmm_s=True,
+            load_3dmm_l=True,
+            load_ref=True,
+            repeat_mirrored=True,
+        )
+
+
+    def train_dataloader(self):
+        return DataLoader(
+            dataset=self.train_ds,
+            batch_size=self.conf.batch_size,
+            shuffle=True,
+            num_workers=self.conf.num_workers,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            dataset=self.val_ds,
+            batch_size=self.conf.batch_size,
+            shuffle=False,
+            num_workers=self.conf.num_workers,
+        )
+        
+    def test_dataloader(self):
+        return [DataLoader(
+            dataset=self.test_ds,
+            batch_size=self.conf.batch_size,
+            shuffle=False,
+            num_workers=self.conf.num_workers,
+        ) for i in range(self.conf.test_extend_factor)]
+
+    # def test_dataloader(self):
+    #     return DataLoader(dataset=self.test_ds, batch_size=self.conf.batch_size, shuffle=False, num_workers=self.conf.num_workers)
+
+
+def get_dataloader(
+    conf,
+    split,
+    load_audio=False,
+    load_video_s=False,
+    load_video_l=False,
+    load_emotion_s=False,
+    load_emotion_l=False,
+    load_3dmm_s=False,
+    load_3dmm_l=False,
+    load_ref=False,
+    repeat_mirrored=True,
+):
     assert split in ["train", "val", "test"], "split must be in [train, val, test]"
     # print('==> Preparing data for {}...'.format(split) + '\n')
-    dataset = ReactionDataset(conf.dataset_path, split, img_size=conf.img_size, crop_size=conf.crop_size,
-                              clip_length=conf.clip_length,
-                              load_audio=load_audio, load_video_s=load_video_s, load_video_l=load_video_l,
-                              load_emotion_s=load_emotion_s, load_emotion_l=load_emotion_l, load_3dmm_s=load_3dmm_s,
-                              load_3dmm_l=load_3dmm_l, load_ref=load_ref, repeat_mirrored=repeat_mirrored)
+    dataset = ReactionDataset(
+        conf.dataset_path,
+        split,
+        img_size=conf.img_size,
+        crop_size=conf.crop_size,
+        clip_length=conf.clip_length,
+        load_audio=load_audio,
+        load_video_s=load_video_s,
+        load_video_l=load_video_l,
+        load_emotion_s=load_emotion_s,
+        load_emotion_l=load_emotion_l,
+        load_3dmm_s=load_3dmm_s,
+        load_3dmm_l=load_3dmm_l,
+        load_ref=load_ref,
+        repeat_mirrored=repeat_mirrored,
+    )
     shuffle = True if split == "train" else False
-    dataloader = DataLoader(dataset=dataset, batch_size=conf.batch_size, shuffle=shuffle, num_workers=conf.num_workers)
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=conf.batch_size,
+        shuffle=shuffle,
+        num_workers=conf.num_workers,
+    )
     return dataloader

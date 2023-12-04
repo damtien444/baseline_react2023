@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
 class KLLoss(nn.Module):
     def __init__(self):
         super(KLLoss, self).__init__()
@@ -16,7 +15,6 @@ class KLLoss(nn.Module):
         return "KLLoss()"
 
 
-
 class VAELoss(nn.Module):
     def __init__(self, kl_p=0.0002):
         super(VAELoss, self).__init__()
@@ -25,7 +23,11 @@ class VAELoss(nn.Module):
         self.kl_p = kl_p
 
     def forward(self, gt_emotion, gt_3dmm, pred_emotion, pred_3dmm, distribution):
-        rec_loss = self.mse(pred_emotion, gt_emotion) + self.mse(pred_3dmm[:,:, :52], gt_3dmm[:,:, :52]) + 10*self.mse(pred_3dmm[:,:, 52:], gt_3dmm[:,:, 52:])
+        rec_loss = (
+            self.mse(pred_emotion, gt_emotion)
+            + self.mse(pred_3dmm[:, :, :52], gt_3dmm[:, :, :52])
+            + 10 * self.mse(pred_3dmm[:, :, 52:], gt_3dmm[:, :, 52:])
+        )
         mu_ref = torch.zeros_like(distribution[0].loc).to(gt_emotion.get_device())
         scale_ref = torch.ones_like(distribution[0].scale).to(gt_emotion.get_device())
         distribution_ref = torch.distributions.Normal(mu_ref, scale_ref)
@@ -37,35 +39,45 @@ class VAELoss(nn.Module):
 
         loss = rec_loss + self.kl_p * kld_loss
 
-
         return loss, rec_loss, kld_loss
 
     def __repr__(self):
         return "VAELoss()"
 
 
-
 def div_loss(Y_1, Y_2):
     loss = 0.0
-    b,t,c = Y_1.shape
-    Y_g = torch.cat([Y_1.view(b,1,-1), Y_2.view(b,1,-1)], dim = 1)
+    b, t, c = Y_1.shape
+    Y_g = torch.cat([Y_1.view(b, 1, -1), Y_2.view(b, 1, -1)], dim=1)
     for Y in Y_g:
         dist = F.pdist(Y, 2) ** 2
-        loss += (-dist /  100).exp().mean()
+        loss += (-dist / 100).exp().mean()
     loss /= b
     return loss
 
 
-
-
 # ================================ BeLFUSION losses ====================================
 
-def MSELoss_AE_v2(prediction, target, target_coefficients, mu, logvar, coefficients_3dmm, 
-                  w_mse=1, w_kld=1, w_coeff=1, 
-                  **kwargs):
+
+def MSELoss_AE_v2(
+    prediction,
+    target,
+    target_coefficients,
+    mu,
+    logvar,
+    coefficients_3dmm,
+    w_mse=1,
+    w_kld=1,
+    w_coeff=1,
+    **kwargs,
+):
     # loss for autoencoder. prediction and target have shape of [batch_size, seq_length, features]
-    assert len(prediction.shape) == len(target.shape), "prediction and target must have the same shape"
-    assert len(prediction.shape) == 3, "Only works with predictions of shape [batch_size, seq_length, features]"
+    assert len(prediction.shape) == len(
+        target.shape
+    ), "prediction and target must have the same shape"
+    assert (
+        len(prediction.shape) == 3
+    ), "Only works with predictions of shape [batch_size, seq_length, features]"
     batch_size = prediction.shape[0]
 
     # join last two dimensions of prediction and target
@@ -85,12 +97,16 @@ def MSELoss_AE_v2(prediction, target, target_coefficients, mu, logvar, coefficie
 def MSELoss(prediction, target, reduction="mean", **kwargs):
     # prediction has shape of [batch_size, num_preds, features]
     # target has shape of [batch_size, num_preds, features]
-    assert len(prediction.shape) == len(target.shape), "prediction and target must have the same shape"
-    assert len(prediction.shape) == 3, "Only works with predictions of shape [batch_size, num_preds, features]"
+    assert len(prediction.shape) == len(
+        target.shape
+    ), "prediction and target must have the same shape"
+    assert (
+        len(prediction.shape) == 3
+    ), "Only works with predictions of shape [batch_size, num_preds, features]"
 
     # manual implementation of MSE loss
     loss = ((prediction - target) ** 2).mean(axis=-1)
-    
+
     # reduce across multiple predictions
     if reduction == "mean":
         loss = torch.mean(loss)
@@ -104,12 +120,16 @@ def MSELoss(prediction, target, reduction="mean", **kwargs):
 def L1Loss(prediction, target, reduction="mean", **kwargs):
     # prediction has shape of [batch_size, num_preds, features]
     # target has shape of [batch_size, num_preds, features]
-    assert len(prediction.shape) == len(target.shape), "prediction and target must have the same shape"
-    assert len(prediction.shape) == 3, "Only works with predictions of shape [batch_size, num_preds, features]"
+    assert len(prediction.shape) == len(
+        target.shape
+    ), "prediction and target must have the same shape"
+    assert (
+        len(prediction.shape) == 3
+    ), "Only works with predictions of shape [batch_size, num_preds, features]"
 
     # manual implementation of L1 loss
     loss = (torch.abs(prediction - target)).mean(axis=-1)
-    
+
     # reduce across multiple predictions
     if reduction == "mean":
         loss = torch.mean(loss)
@@ -120,20 +140,31 @@ def L1Loss(prediction, target, reduction="mean", **kwargs):
     return loss
 
 
-def BeLFusionLoss(prediction, target, encoded_prediction, encoded_target, 
-                  losses = [L1Loss, MSELoss], 
-                  losses_multipliers = [1, 1], 
-                  losses_decoded = [False, True], 
-                  **kwargs):
+def BeLFusionLoss(
+    prediction,
+    target,
+    encoded_prediction,
+    encoded_target,
+    losses=[L1Loss, MSELoss],
+    losses_multipliers=[1, 1],
+    losses_decoded=[False, True],
+    **kwargs,
+):
     # encoded_prediction has shape of [batch_size, num_preds, features]
     # encoded_target has shape of [batch_size, num_preds, features]
     # prediction has shape of [batch_size, num_preds, seq_len, features]
     # target has shape of [batch_size, num_preds, seq_len, features]
-    assert len(losses) == len(losses_multipliers), "losses and losses_multipliers must have the same length"
-    assert len(losses) == len(losses_decoded), "losses and losses_decoded must have the same length"
-    #assert len(encoded_prediction.shape) == 3 and len(prediction.shape) == 4, "BeLFusionLoss only works with multiple predictions"
+    assert len(losses) == len(
+        losses_multipliers
+    ), "losses and losses_multipliers must have the same length"
+    assert len(losses) == len(
+        losses_decoded
+    ), "losses and losses_decoded must have the same length"
+    # assert len(encoded_prediction.shape) == 3 and len(prediction.shape) == 4, "BeLFusionLoss only works with multiple predictions"
 
-    if len(encoded_prediction.shape) == 2 and len(prediction.shape) == 3: # --> for the test script to work, only a single pred is used
+    if (
+        len(encoded_prediction.shape) == 2 and len(prediction.shape) == 3
+    ):  # --> for the test script to work, only a single pred is used
         # unsqueeze the first dimension, because we only have one prediction
         prediction = prediction.unsqueeze(1)
         target = target.unsqueeze(1)
@@ -152,11 +183,14 @@ def BeLFusionLoss(prediction, target, encoded_prediction, encoded_target,
     for loss_name, w, decoded in zip(losses, losses_multipliers, losses_decoded):
         loss_final_name = loss_name + f"_{'decoded' if decoded else 'encoded'}"
         if decoded:
-            losses_dict[loss_final_name] = eval(loss_name)(prediction, target, reduction="min")
+            losses_dict[loss_final_name] = eval(loss_name)(
+                prediction, target, reduction="min"
+            )
         else:
-            losses_dict[loss_final_name] = eval(loss_name)(encoded_prediction, encoded_target, reduction="min")
-    
+            losses_dict[loss_final_name] = eval(loss_name)(
+                encoded_prediction, encoded_target, reduction="min"
+            )
+
         losses_dict["loss"] += losses_dict[loss_final_name] * w
 
     return losses_dict
-

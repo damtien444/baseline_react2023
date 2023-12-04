@@ -15,14 +15,19 @@ from cv2 import CAP_PROP_XI_AUTO_BANDWIDTH_CALCULATION
 import numpy as np
 import torch as th
 
-LOSSES_TYPES = ["mse", "mse_l1", ]
+LOSSES_TYPES = [
+    "mse",
+    "mse_l1",
+]
 MSE, MSE_L1 = LOSSES_TYPES
+
 
 def mean_flat(tensor):
     """
     Take the mean over all non-batch dimensions.
     """
     return tensor.mean(dim=list(range(1, len(tensor.shape))))
+
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
     """
@@ -47,24 +52,27 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
             num_diffusion_timesteps,
             lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,
         )
-    elif 'sqrt' in schedule_name:
+    elif "sqrt" in schedule_name:
         sqrt_schedulers = {
-            "10sqrt1e-4": lambda t: max(0, 1-np.power(t + 0.0001, 1/10)),
-            "5sqrt1e-4": lambda t: max(0, 1-np.power(t + 0.0001, 1/5)),
-            "3sqrt1e-4": lambda t: max(0, 1-np.power(t + 0.0001, 1/3)),
-            "sqrt1e-4": lambda t: max(0, 1-np.sqrt(t + 0.0001)),
-            "sqrt2e-2": lambda t: max(0, 1-np.sqrt(t + 0.02)),
-            "sqrt5e-2": lambda t: max(0, 1-np.sqrt(t + 0.05)),
-            "sqrt1e-1": lambda t: max(0, 1-np.sqrt(t + 0.1)),
-            "sqrt2e-2": lambda t: max(0, 1-np.sqrt(t + 0.2)),    
+            "10sqrt1e-4": lambda t: max(0, 1 - np.power(t + 0.0001, 1 / 10)),
+            "5sqrt1e-4": lambda t: max(0, 1 - np.power(t + 0.0001, 1 / 5)),
+            "3sqrt1e-4": lambda t: max(0, 1 - np.power(t + 0.0001, 1 / 3)),
+            "sqrt1e-4": lambda t: max(0, 1 - np.sqrt(t + 0.0001)),
+            "sqrt2e-2": lambda t: max(0, 1 - np.sqrt(t + 0.02)),
+            "sqrt5e-2": lambda t: max(0, 1 - np.sqrt(t + 0.05)),
+            "sqrt1e-1": lambda t: max(0, 1 - np.sqrt(t + 0.1)),
+            "sqrt2e-2": lambda t: max(0, 1 - np.sqrt(t + 0.2)),
         }
-        assert schedule_name in sqrt_schedulers.keys(), f"Unknown sqrt scheduler {schedule_name}"
+        assert (
+            schedule_name in sqrt_schedulers.keys()
+        ), f"Unknown sqrt scheduler {schedule_name}"
         return betas_for_alpha_bar(
             num_diffusion_timesteps,
             sqrt_schedulers[schedule_name],
         )
     else:
         raise NotImplementedError(f"unknown beta schedule: {schedule_name}")
+
 
 def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     """
@@ -82,8 +90,11 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     for i in range(num_diffusion_timesteps):
         t1 = i / num_diffusion_timesteps
         t2 = (i + 1) / num_diffusion_timesteps
-        betas.append(min(1 - alpha_bar(t2) / max(0.00001, alpha_bar(t1)), max_beta)) # the max is to prevent singularities
+        betas.append(
+            min(1 - alpha_bar(t2) / max(0.00001, alpha_bar(t1)), max_beta)
+        )  # the max is to prevent singularities
     return np.array(betas)
+
 
 class ModelMeanType(enum.Enum):
     """
@@ -94,11 +105,13 @@ class ModelMeanType(enum.Enum):
     START_X = enum.auto()  # the model predicts x_0
     EPSILON = enum.auto()  # the model predicts epsilon
 
+
 mean_type_dict = {
     "previous_x": ModelMeanType.PREVIOUS_X,
     "start_x": ModelMeanType.START_X,
-    "epsilon": ModelMeanType.EPSILON
+    "epsilon": ModelMeanType.EPSILON,
 }
+
 
 class ModelVarType(enum.Enum):
     """
@@ -113,12 +126,14 @@ class ModelVarType(enum.Enum):
     FIXED_LARGE = enum.auto()
     LEARNED_RANGE = enum.auto()
 
+
 var_type_dict = {
     "learned": ModelVarType.LEARNED,
     "fixed_small": ModelVarType.FIXED_SMALL,
     "fixed_large": ModelVarType.FIXED_LARGE,
-    "learned_range": ModelVarType.LEARNED_RANGE
+    "learned_range": ModelVarType.LEARNED_RANGE,
 }
+
 
 class GaussianDiffusion:
     """
@@ -142,13 +157,13 @@ class GaussianDiffusion:
         *,
         noise_schedule,
         steps,
-        predict='start_x',
+        predict="start_x",
         var_type="fixed_large",
-        losses="mse", # this can be a string or an array of strings
-        losses_multipliers=1., # this can be a single float or an array of floats
+        losses="mse",  # this can be a string or an array of strings
+        losses_multipliers=1.0,  # this can be a single float or an array of floats
         rescale_timesteps=False,
         noise_std=1,
-        **kwargs
+        **kwargs,
     ):
         assert predict in mean_type_dict.keys(), f"predict='{predict}' not supported"
         self.model_mean_type = mean_type_dict[predict]
@@ -157,9 +172,13 @@ class GaussianDiffusion:
 
         # support for a linear combination (losses_multipliers)) of several loses
         if isinstance(losses, str):
-            losses = [losses, ] # retro-compatibility
+            losses = [
+                losses,
+            ]  # retro-compatibility
         if isinstance(losses_multipliers, float):
-            losses_multipliers = [losses_multipliers, ]
+            losses_multipliers = [
+                losses_multipliers,
+            ]
         assert len(losses) == len(losses_multipliers)
         self.losses = losses
         self.losses_multipliers = losses_multipliers
@@ -228,7 +247,7 @@ class GaussianDiffusion:
         """
         Diffuse the data for a given number of diffusion steps.
 
-        In other words, sample from q(x_t | x_0). 
+        In other words, sample from q(x_t | x_0).
         -> using the reparametrization trick of:
             sqrt(alfa) * x_0 + sqrt(1 - alfa) * eps
 
@@ -240,9 +259,14 @@ class GaussianDiffusion:
         if noise is None:
             noise = th.randn_like(x_start) * self.noise_std
         assert noise.shape == x_start.shape
-        weighed_x_start = _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-        weighed_noise = _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
-        return ( weighed_x_start + weighed_noise )
+        weighed_x_start = (
+            _extract_into_tensor(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+        )
+        weighed_noise = (
+            _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+            * noise
+        )
+        return weighed_x_start + weighed_noise
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """
@@ -476,7 +500,11 @@ class GaussianDiffusion:
             )
         noise_to_add = nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         sample = out["mean"] + noise_to_add
-        return {"sample": sample, "pred_xstart": out["pred_xstart"], "noise_to_add": noise_to_add}
+        return {
+            "sample": sample,
+            "pred_xstart": out["pred_xstart"],
+            "noise_to_add": noise_to_add,
+        }
 
     def p_sample_loop(
         self,
@@ -512,17 +540,19 @@ class GaussianDiffusion:
         :return: a non-differentiable batch of samples.
         """
         final = None
-        for i, sample in enumerate(self.p_sample_loop_progressive(
-            model,
-            shape,
-            noise=noise,
-            clip_denoised=clip_denoised,
-            denoised_fn=denoised_fn,
-            cond_fn=cond_fn,
-            model_kwargs=model_kwargs,
-            device=device,
-            progress=progress,
-        )):
+        for i, sample in enumerate(
+            self.p_sample_loop_progressive(
+                model,
+                shape,
+                noise=noise,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                cond_fn=cond_fn,
+                model_kwargs=model_kwargs,
+                device=device,
+                progress=progress,
+            )
+        ):
             if max_step != -1 and i == max_step:
                 break
             final = sample
@@ -540,7 +570,7 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
-        pred=None
+        pred=None,
     ):
         """
         Generate samples from the model and yield intermediate samples from
@@ -622,7 +652,7 @@ class GaussianDiffusion:
         noise = th.randn_like(x) * self.noise_std
         mean_pred = (
             out["pred_xstart"] * th.sqrt(alpha_bar_prev)
-            + th.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps
+            + th.sqrt(1 - alpha_bar_prev - sigma**2) * eps
         )
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
@@ -752,15 +782,12 @@ class GaussianDiffusion:
                 yield out
                 img = out["sample"]
 
-    def denoise(self, model, x_start, t, model_kwargs=None, noise=None, all_kwargs=None):
+    def denoise(
+        self, model, x_start, t, model_kwargs=None, noise=None, all_kwargs=None
+    ):
         raise NotImplementedError
 
-    def get_gt(
-        self,
-        model,
-        obs,
-        pred
-    ): 
+    def get_gt(self, model, obs, pred):
         raise NotImplementedError
 
 
@@ -781,15 +808,15 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
 
 
 class LatentDiffusion(GaussianDiffusion):
-
     def __init__(self, cfg):
         # compulsory in cfg --> steps, k, losses, losses_multipliers, losses_decoded
-        super().__init__(noise_schedule=cfg.get("noise_schedule", "cosine"),
+        super().__init__(
+            noise_schedule=cfg.get("noise_schedule", "cosine"),
             steps=cfg.diffusion_steps,
             predict=cfg.get("predict", "start_x"),
             var_type=cfg.get("var_type", "fixed_large"),
             rescale_timesteps=cfg.get("rescale_timesteps", False),
-            noise_std=cfg.get("noise_std", 1)
+            noise_std=cfg.get("noise_std", 1),
         )
         self.k = cfg.k
         self.cond_dropout = cfg.get("cond_dropout", 0.0)
@@ -807,7 +834,7 @@ class LatentDiffusion(GaussianDiffusion):
         device=None,
         progress=False,
         eta=0.0,
-        gt=None
+        gt=None,
     ):
         """
         Use DDIM to sample from the model and yield intermediate samples from
@@ -823,7 +850,7 @@ class LatentDiffusion(GaussianDiffusion):
         model_kwargs["cond"] = matcher.encode_emotion(model_kwargs["cond"])
         gt_emb = matcher.encode_emotion(gt)
         gt_emb_decoded = matcher.decode_emotion(gt_emb)
-        #pred_emb = model.encode_emotion(pred) # USEFUL TO TEST
+        # pred_emb = model.encode_emotion(pred) # USEFUL TO TEST
         # ---------
 
         if device is None:
@@ -854,11 +881,11 @@ class LatentDiffusion(GaussianDiffusion):
                     model_kwargs=model_kwargs,
                     eta=eta,
                 )
-            
-                #out["pred_xstart_enc"] = out["pred_xstart"]
-                #out["sample_enc"] = out["sample"]
-                #out["sample"] = model.decode_emotion(out["sample"])
-                #out["pred_xstart"] = model.decode_emotion(out["pred_xstart"])
+
+                # out["pred_xstart_enc"] = out["pred_xstart"]
+                # out["sample_enc"] = out["sample"]
+                # out["sample"] = model.decode_emotion(out["sample"])
+                # out["pred_xstart"] = model.decode_emotion(out["pred_xstart"])
 
                 out = {
                     "encoded_prediction": out["pred_xstart"],
@@ -868,67 +895,72 @@ class LatentDiffusion(GaussianDiffusion):
                     "sample_enc": out["sample"],
                 }
                 out["3dmm_coeff"] = matcher.decode_3dmm(out["prediction"])
-                
+
                 yield out
                 img = out["sample_enc"]
 
-    def get_gt(
-        self,
-        model,
-        pred
-    ): 
-
-        pred_emb = model.encode_emotion(pred) # USEFUL TO TEST
+    def get_gt(self, model, pred):
+        pred_emb = model.encode_emotion(pred)  # USEFUL TO TEST
         return model.decode_emotion(pred_emb)
 
-
-    def denoise(self, matcher, model, x_start, t, model_kwargs=None, noise=None, all_kwargs=None):
+    def denoise(
+        self, matcher, model, x_start, t, model_kwargs=None, noise=None, all_kwargs=None
+    ):
         k_active = model.training
 
         batch_size = x_start.shape[0]
         x_start = matcher.encode_emotion(x_start)
-        x_start_repeated = x_start.repeat_interleave(self.k, dim=0) if k_active else x_start # repeat K times
+        x_start_repeated = (
+            x_start.repeat_interleave(self.k, dim=0) if k_active else x_start
+        )  # repeat K times
 
         # replace obs with zeros with probability "self.cond_dropout"
         model_kwargs["cond"] = matcher.encode_emotion(model_kwargs["cond"])
-        if np.random.random() < self.cond_dropout: # for classifier-free guidance!
+        if np.random.random() < self.cond_dropout:  # for classifier-free guidance!
             model_kwargs["cond"] = th.zeros_like(model_kwargs["cond"])
 
         # we repeat the obs 'k' times to generate 'k' predictions for each observation
-        model_kwargs["cond"] = model_kwargs["cond"].repeat_interleave(self.k, dim=0) if k_active else model_kwargs["cond"] # repeat K times
+        model_kwargs["cond"] = (
+            model_kwargs["cond"].repeat_interleave(self.k, dim=0)
+            if k_active
+            else model_kwargs["cond"]
+        )  # repeat K times
 
-        t = t.repeat_interleave(self.k, dim=0) if k_active else t # (2, 25) -> (2, ..., 2, 25, ..., 25)
+        t = (
+            t.repeat_interleave(self.k, dim=0) if k_active else t
+        )  # (2, 25) -> (2, ..., 2, 25, ..., 25)
 
         if model_kwargs is None:
             model_kwargs = {}
         if noise is None:
             noise = th.randn_like(x_start_repeated) * self.noise_std
 
-        x_t = self.q_sample(x_start_repeated, t, noise=noise) # apply perturbations from '0' to 't' to original image (x_start)
+        x_t = self.q_sample(
+            x_start_repeated, t, noise=noise
+        )  # apply perturbations from '0' to 't' to original image (x_start)
 
         model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
         target = {
-                ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
-                    x_start=x_start_repeated, x_t=x_t, t=t
-                )[0],
-                ModelMeanType.START_X: x_start_repeated,
-                ModelMeanType.EPSILON: noise,
-            }[self.model_mean_type]
+            ModelMeanType.PREVIOUS_X: self.q_posterior_mean_variance(
+                x_start=x_start_repeated, x_t=x_t, t=t
+            )[0],
+            ModelMeanType.START_X: x_start_repeated,
+            ModelMeanType.EPSILON: noise,
+        }[self.model_mean_type]
 
         decoded_model_output = matcher.decode_emotion(model_output).contiguous()
         decoded_target = matcher.decode_emotion(target).contiguous().detach()
 
         results = {
-            "encoded_prediction": model_output,                     # encoded
-            "encoded_target": target,                               # encoded
-            "prediction": decoded_model_output,                     # decoded
-            "target": decoded_target,                               # decoded
+            "encoded_prediction": model_output,  # encoded
+            "encoded_target": target,  # encoded
+            "prediction": decoded_model_output,  # decoded
+            "target": decoded_target,  # decoded
         }
         # undo the repeat_interleave for the k predictions
         if k_active:
-            results = {k: v.view(batch_size, self.k, *results[k].shape[1:]) for k, v in results.items()}
+            results = {
+                k: v.view(batch_size, self.k, *results[k].shape[1:])
+                for k, v in results.items()
+            }
         return results
-
-
-
-    

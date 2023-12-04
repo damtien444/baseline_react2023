@@ -8,27 +8,23 @@ from torch import nn
 from torch.nn import init
 
 
-
 # https://github.com/phizaz/diffae/
 
-DTYPES = {
-    'float16': torch.float16,
-    'float32': torch.float32,
-    'float64': torch.float64
-}
+DTYPES = {"float16": torch.float16, "float32": torch.float32, "float64": torch.float64}
+
 
 class LatentNetType(Enum):
-    none = 'none'
+    none = "none"
     # injecting inputs into the hidden layers
-    skip = 'skip'
+    skip = "skip"
 
 
 class Activation(Enum):
-    none = 'none'
-    relu = 'relu'
-    lrelu = 'lrelu'
-    silu = 'silu'
-    tanh = 'tanh'
+    none = "none"
+    relu = "relu"
+    lrelu = "lrelu"
+    silu = "silu"
+    tanh = "tanh"
 
     def get_act(self):
         if self == Activation.none:
@@ -103,17 +99,13 @@ class MLPLNAct(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 if self.activation == Activation.relu:
-                    init.kaiming_normal_(module.weight,
-                                         a=0,
-                                         nonlinearity='relu')
+                    init.kaiming_normal_(module.weight, a=0, nonlinearity="relu")
                 elif self.activation == Activation.lrelu:
-                    init.kaiming_normal_(module.weight,
-                                         a=0.2,
-                                         nonlinearity='leaky_relu')
+                    init.kaiming_normal_(
+                        module.weight, a=0.2, nonlinearity="leaky_relu"
+                    )
                 elif self.activation == Activation.silu:
-                    init.kaiming_normal_(module.weight,
-                                         a=0,
-                                         nonlinearity='relu')
+                    init.kaiming_normal_(module.weight, a=0, nonlinearity="relu")
                 else:
                     # leave it as default
                     pass
@@ -144,27 +136,32 @@ class MLPSkipNet(nn.Module):
     concat x to hidden layers
     default MLP for the latent DPM in the paper!
     """
-    def __init__(self, 
-                num_channels=512, # this is the number of features in the input (denoising target)
-                skip_layers='all',
-                num_hid_channels=128,
-                num_layers=20,
-                num_cond_emb_channels=64, # this is the number of features in the cond embedding
-                num_time_emb_channels=64, # this is the number of features in the time embedding
-                activation=Activation.silu,
-                use_norm=True,
-                condition_bias=0,
-                dropout=0,
-                last_act=Activation.none,
-                num_time_layers=2,
-                time_last_act=False,
-                num_cond_layers=2,
-                cond_last_act=False,
-                dtype='float32'):
+
+    def __init__(
+        self,
+        num_channels=512,  # this is the number of features in the input (denoising target)
+        skip_layers="all",
+        num_hid_channels=128,
+        num_layers=20,
+        num_cond_emb_channels=64,  # this is the number of features in the cond embedding
+        num_time_emb_channels=64,  # this is the number of features in the time embedding
+        activation=Activation.silu,
+        use_norm=True,
+        condition_bias=0,
+        dropout=0,
+        last_act=Activation.none,
+        num_time_layers=2,
+        time_last_act=False,
+        num_cond_layers=2,
+        cond_last_act=False,
+        dtype="float32",
+    ):
         super().__init__()
 
         self.num_time_emb_channels = num_time_emb_channels
-        self.skip_layers = skip_layers if skip_layers != "all" else list(range(num_layers))
+        self.skip_layers = (
+            skip_layers if skip_layers != "all" else list(range(num_layers))
+        )
         self.dtype = DTYPES[dtype]
 
         layers = []
@@ -223,18 +220,19 @@ class MLPSkipNet(nn.Module):
                     b,
                     norm=norm,
                     activation=act,
-                    cond_channels=2*num_channels,
+                    cond_channels=2 * num_channels,
                     use_cond=cond,
                     condition_bias=condition_bias,
                     dropout=dropout,
-                ))
+                )
+            )
         self.last_act = last_act.get_act()
 
     def forward(self, x, t, cond):
         t = timestep_embedding(t, self.num_time_emb_channels, dtype=self.dtype)
         time_emb = self.time_embed(t)
         cond_emb = self.cond_embed(cond)
-        #print("AFTER", "timestep embedding", time_emb.shape, "cond", cond_emb.shape)
+        # print("AFTER", "timestep embedding", time_emb.shape, "cond", cond_emb.shape)
         cond = torch.cat([time_emb, cond_emb], dim=1)
         h = x
         for i in range(len(self.layers)):
@@ -244,4 +242,3 @@ class MLPSkipNet(nn.Module):
             h = self.layers[i].forward(x=h, cond=cond)
         h = self.last_act(h)
         return h
-

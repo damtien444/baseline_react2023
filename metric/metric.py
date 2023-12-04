@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 
+
 def s_mse(preds):
     # preds: (B, 10, 750, 25)
     dist = 0
@@ -10,7 +11,9 @@ def s_mse(preds):
             return 0.0
         preds_item_ = preds_item.reshape(preds_item.shape[0], -1)
         dist_ = torch.pow(torch.cdist(preds_item_, preds_item_), 2)
-        dist_ = torch.sum(dist_) / (preds_item.shape[0] * (preds_item.shape[0] - 1) * preds_item_.shape[1])
+        dist_ = torch.sum(dist_) / (
+            preds_item.shape[0] * (preds_item.shape[0] - 1) * preds_item_.shape[1]
+        )
         dist += dist_
     return dist / preds.shape[0]
 
@@ -24,7 +27,6 @@ def FRVar(preds):
         # preds: (N, 10, 750, 25)
         var = torch.var(preds, dim=2)
         return torch.mean(var)
-
 
 
 def FRDvs(preds):
@@ -43,6 +45,7 @@ import numpy as np
 import torch
 import os
 
+
 def compute_FRVar(pred):
     FRVar_list = []
     for k in range(pred.shape[0]):
@@ -51,6 +54,3 @@ def compute_FRVar(pred):
             var = np.mean(np.var(pred_item[i].numpy().astype(np.float32), axis=0))
             FRVar_list.append(var)
     return np.mean(FRVar_list)
-
-
-

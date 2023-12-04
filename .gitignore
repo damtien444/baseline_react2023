@@ -5,8 +5,11 @@
 *.npy
 test.csv
 /results
+tb_logs/
 
 wandb/
+react-baseline/
+.vscode/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

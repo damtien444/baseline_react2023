@@ -13,11 +13,15 @@ import yaml
 
 def load_config(config_path=None):
     cli_conf = OmegaConf.from_cli()
-    model_conf = OmegaConf.load(cli_conf.pop('config') if config_path is None else config_path)
+    model_conf = OmegaConf.load(
+        cli_conf.pop("config") if config_path is None else config_path
+    )
     return OmegaConf.merge(model_conf, cli_conf)
+
 
 def load_config_from_file(path):
     return OmegaConf.load(path)
+
 
 def store_config(config):
     # store config to directory
@@ -35,8 +39,8 @@ def torch_img_to_np2(img):
     img = img.detach().cpu().numpy()
     # img = img * np.array([0.229, 0.224, 0.225]).reshape(1,-1,1,1)
     # img = img + np.array([0.485, 0.456, 0.406]).reshape(1,-1,1,1)
-    img = img * np.array([0.5, 0.5, 0.5]).reshape(1,-1,1,1)
-    img = img + np.array([0.5, 0.5, 0.5]).reshape(1,-1,1,1)
+    img = img * np.array([0.5, 0.5, 0.5]).reshape(1, -1, 1, 1)
+    img = img + np.array([0.5, 0.5, 0.5]).reshape(1, -1, 1, 1)
     img = img.transpose(0, 2, 3, 1)
     img = img * 255.0
     img = np.clip(img, 0, 255).astype(np.uint8)[:, :, :, [2, 1, 0]]
@@ -45,10 +49,11 @@ def torch_img_to_np2(img):
 
 
 def _fix_image(image):
-    if image.max() < 30.:
-        image = image * 255.
+    if image.max() < 30.0:
+        image = image * 255.0
     image = np.clip(image, 0, 255).astype(np.uint8)[:, :, :, [2, 1, 0]]
     return image
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -67,5 +72,3 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
-

@@ -1,5 +1,6 @@
 import torch
 
+
 def compute_FRVar(preds):
     if len(preds.shape) == 3:
         # preds: (10, 750, 25)
