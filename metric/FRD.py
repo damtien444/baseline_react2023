@@ -13,8 +13,8 @@ def _func(k_neighbour_matrix, k_pred, em=None):
         dwt_list = []
         for n_index in range(neighbour_index_len):
             
-            if neighbour_index[n_index] > len(em) - 1:
-                continue
+            # if neighbour_index[n_index] > len(em) - 1:
+            #     continue
             
             emotion = em[neighbour_index[n_index]]
             res = 0
@@ -25,8 +25,8 @@ def _func(k_neighbour_matrix, k_pred, em=None):
                 )
             dwt_list.append(res)
         
-        if len(dwt_list) == 0:
-            continue
+        # if len(dwt_list) == 0:
+        #     continue
         
         min_dwt_sum += min(dwt_list)
     return min_dwt_sum

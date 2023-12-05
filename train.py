@@ -109,7 +109,17 @@ def parse_arg():
     parser.add_argument(
         "--div-p", default=10, type=float, help="hyperparameter for div-loss"
     )
-    parser.add_argument("--val_epoch", default=1, type=int, help="val step")
+    parser.add_argument("--val_epoch", default=5, type=int, help="val step")
+    
+    parser.add_argument("--wandb", action="store_true", help="use wandb")
+    
+    parser.add_argument("--debug", action="store_true", help="debug mode")
+    
+    parser.add_argument("--seed", default=10, type=int, help="seed")
+    
+    parser.add_argument("--logdir", default="./logs", type=str, help="log dir")
+        
+    
 
     args = parser.parse_args()
     return args

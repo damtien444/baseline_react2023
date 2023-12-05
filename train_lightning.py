@@ -1,17 +1,19 @@
 import os
-from typing import Any
+
 import pytorch_lightning as pl
-from pytorch_lightning.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 import torch
-from metric.FRC import compute_FRC, compute_FRC_mp
-from metric.FRD import compute_FRD, compute_FRD_mp
+from pytorch_lightning.utilities.types import OptimizerLRScheduler
+from lightning.pytorch import seed_everything
+
+import wandb
+from dataset import ReactDataModule
+from metric.FRC import compute_FRC_mp
+from metric.FRD import compute_FRD_mp
 from metric.FRDvs import compute_FRDvs
 from metric.FRVar import compute_FRVar
 from metric.S_MSE import compute_s_mse
-from metric.TLCC import compute_TLCC, compute_TLCC_mp
+from metric.TLCC import compute_TLCC_mp
 from model.losses import VAELoss, div_loss
-import wandb
-from dataset import ReactDataModule
 from render import Render
 
 
@@ -226,6 +228,11 @@ class ModelLightning(pl.LightningModule):
         print("speaker_emotion_gt.shape", speaker_emotion_gt.shape)
         print("all_listener_emotion_pred.shape", all_listener_emotion_pred.shape)
         
+        torch.save(listener_emotion_pred, os.path.join(self.out_dir, "listener_emotion_pred.pt"))
+        torch.save(listener_emotion_gt, os.path.join(self.out_dir, "listener_emotion_gt.pt"))
+        torch.save(speaker_emotion_gt, os.path.join(self.out_dir, "speaker_emotion_gt.pt"))
+        torch.save(all_listener_emotion_pred, os.path.join(self.out_dir, "all_listener_emotion_pred.pt"))
+        
         p = args.num_workers
         
         N = speaker_emotion_gt.shape[0]
@@ -300,7 +307,7 @@ class ModelLightning(pl.LightningModule):
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         return torch.optim.AdamW(
-            self.parameters(),
+            self.model.parameters(),
             lr=self.learning_rate,
             weight_decay=self.weight_decay,
             betas=(0.9, 0.999),
@@ -308,32 +315,32 @@ class ModelLightning(pl.LightningModule):
 
 
 if __name__ == "__main__":
+    from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+    from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+
+    from config import ACCELERATOR, DEVICES
+    from model import TransformerVAE
     from train import parse_arg
 
-    from config import ACCELERATOR, DEVICES, PRECISION, BATCH_SIZE
-
-    from pytorch_lightning.strategies import DeepSpeedStrategy
-    from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-    from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
-
     torch.set_float32_matmul_precision("medium")
+    seed_everything(42, workers=True)
 
-    # wandb.init(project="react-baseline",)
-
-    # logger = WandbLogger(project="react-baseline")
-    logger = TensorBoardLogger("tb_logs", name="react-baseline_overfitonebatch")
+    args = parse_arg()
+        
+    if args.wandb:
+        wandb.init(project="react-baseline",)
+        logger = WandbLogger(project="react-baseline")
+        
+    else:
+        logger = TensorBoardLogger(args.out_dir, name="react-baseline")
+    
     checkpoint_callback = ModelCheckpoint(
-        dirpath="/home/tien/playground_facereconstruction/checkpoint/react_baseline_transformerVAE",
+        dirpath=args.outdir,
         monitor="val_loss",
     )
 
-    args = parse_arg()
-    args.dataset_path = "/home/tien/playground_facereconstruction/data/react_2024"
-    args.batch_size = BATCH_SIZE
-    args.out_dir = "/home/tien/playground_facereconstruction/output/react_baseline_transformerVAE/test"
     args.test_extend_factor = 10
 
-    from model import TransformerVAE
 
     pmt_model = TransformerVAE(
         img_size=args.img_size,
@@ -348,11 +355,9 @@ if __name__ == "__main__":
     )
     
 
-
     criterion = VAELoss(args.kl_p)
     
     render = Render("cuda")
-    
 
     datamodule = ReactDataModule(conf=args)
 
@@ -363,9 +368,8 @@ if __name__ == "__main__":
         div_p=args.div_p,
         weight_decay=args.weight_decay,
         render=render,
-        out_dir=args.out_dir,
+        out_dir=args.outdir,
     )
-
 
     trainer = pl.Trainer(
         accelerator=ACCELERATOR,
@@ -376,11 +380,14 @@ if __name__ == "__main__":
         # precision=PRECISION,
         callbacks=[EarlyStopping(monitor="val_loss", patience=5), checkpoint_callback],
         logger=logger,
-        check_val_every_n_epoch=5,
+        check_val_every_n_epoch=args.val_epoch,
         log_every_n_steps=5,
-        # fast_dev_run=True,
+        fast_dev_run=args.debug,
         # overfit_batches=1,
+        # deterministic=True,
+        enable_checkpointing=True
     )
+    # trainer.tune(model, datamodule=datamodule)
 
     trainer.fit(model, datamodule=datamodule)
     trainer.test(model, datamodule=datamodule)

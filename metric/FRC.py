@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from scipy.spatial.distance import pdist
 import numpy as np
@@ -161,15 +162,15 @@ def _func(k_neighbour_matrix, k_pred, em=None):
         ccc_list = []
         for n_index in range(neighbour_index_len):
             
-            if neighbour_index[n_index] > len(em) - 1:
-                continue
+            # if neighbour_index[n_index] > len(em) - 1:
+            #     continue
             
             emotion = em[neighbour_index[n_index]]
             ccc = concordance_correlation_coefficient(emotion, k_pred[i])
             ccc_list.append(ccc)
         
-        if len(ccc_list) == 0:
-            continue
+        # if len(ccc_list) == 0:
+        #     continue
         
         max_ccc_sum += max(ccc_list)
     return max_ccc_sum
