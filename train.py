@@ -96,11 +96,11 @@ def parse_arg():
     parser.add_argument("--render", action="store_true", help="w/ or w/o render")
     parser.add_argument("--momentum", type=float, default=0.99)
     parser.add_argument("--outdir", default="./results", type=str, help="result dir")
-    parser.add_argument("--device", default="cuda:0", type=str, help="device: cuda / cpu")
+    parser.add_argument("--device", default="cuda", type=str, help="device: cuda / cpu")
     parser.add_argument(
         "--gpu-ids",
         type=str,
-        default="0",
+        default="1",
         help="gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU",
     )
     parser.add_argument(
@@ -118,7 +118,8 @@ def parse_arg():
     parser.add_argument("--seed", default=10, type=int, help="seed")
     
     parser.add_argument("--logdir", default="./logs", type=str, help="log dir")
-        
+    
+    parser.add_argument("--precision", default="32", type=str, help="precision")
     
 
     args = parser.parse_args()

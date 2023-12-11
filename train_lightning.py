@@ -13,14 +13,24 @@ from metric.FRDvs import compute_FRDvs
 from metric.FRVar import compute_FRVar
 from metric.S_MSE import compute_s_mse
 from metric.TLCC import compute_TLCC_mp
+from metric.FRRea import compute_fid
 from model.losses import VAELoss, div_loss
 from render import Render
 
 
 class ModelLightning(pl.LightningModule):
     def __init__(
-        self, model, criterion, learning_rate=1e-3, div_p=0.1, weight_decay=0.0,
-        binarize=False, render=None, out_dir=None, len_val_ds=0, test_extend_factor=1
+        self,
+        model,
+        criterion,
+        learning_rate=1e-3,
+        div_p=0.1,
+        weight_decay=0.0,
+        binarize=False,
+        render=None,
+        out_dir=None,
+        len_val_ds=0,
+        test_extend_factor=1,
     ):
         super().__init__()
         self.model = model
@@ -28,12 +38,12 @@ class ModelLightning(pl.LightningModule):
         self.criterion = criterion
         self.div_p = div_p
         self.weight_decay = weight_decay
-        
+
         self.binarize = binarize
         self.render = render
         self.out_dir = out_dir
         self.len_val_ds = len_val_ds
-        
+
         os.makedirs(self.out_dir, exist_ok=True)
 
     def forward(self, x):
@@ -135,63 +145,42 @@ class ModelLightning(pl.LightningModule):
         )
 
         return loss
-    
+
     def on_test_start(self) -> None:
         self.listener_emotion_gt_list = []
         self.listener_emotion_pred_list = []
         self.speaker_emotion_list = []
         self.all_listener_emotion_pred_list = []
-    
-    def test_step(self, batch, batch_idx, dataloader_idx=0):
 
-        (speaker_video_clip,
-        speaker_audio_clip,
-        speaker_emotion,
-        _,
-        listener_video_clip,
-        _,
-        listener_emotion,
-        listener_3dmm,
-        listener_references,) = batch
-        
-        
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        (
+            speaker_video_clip,
+            speaker_audio_clip,
+            speaker_emotion,
+            _,
+            listener_video_clip,
+            _,
+            listener_emotion,
+            listener_3dmm,
+            listener_references,
+        ) = batch
+
         prediction = self.model(
-                speaker_video=speaker_video_clip,
-                speaker_audio=speaker_audio_clip,
-                speaker_emotion=speaker_emotion,
-                listener_emotion=listener_emotion,
-            )
-        
+            speaker_video=speaker_video_clip,
+            speaker_audio=speaker_audio_clip,
+            speaker_emotion=speaker_emotion,
+            listener_emotion=listener_emotion,
+        )
+
         listener_3dmm_out, listener_emotion_out, distribution = prediction
         loss, rec_loss, kld_loss = self.criterion(
-                    listener_emotion,
-                    listener_3dmm,
-                    listener_emotion_out,
-                    listener_3dmm_out,
-                    distribution,
-                )
-        
-        # self.log(
-        #     "val_loss", loss, on_step=True, on_epoch=True, prog_bar=False, logger=True
-        # )
-        # self.log(
-        #     "val_rec_loss",
-        #     rec_loss,
-        #     on_step=True,
-        #     on_epoch=True,
-        #     prog_bar=False,
-        #     logger=True,
-        # )
-        # self.log(
-        #     "val_kld_loss",
-        #     kld_loss,
-        #     on_step=True,
-        #     on_epoch=True,
-        #     prog_bar=False,
-        #     logger=True,
-        # )
-        
-        
+            listener_emotion,
+            listener_3dmm,
+            listener_emotion_out,
+            listener_3dmm_out,
+            distribution,
+        )
+
         if self.binarize:
             listener_emotion_out[:, :, :15] = torch.round(
                 listener_emotion_out[:, :, :15]
@@ -201,9 +190,7 @@ class ModelLightning(pl.LightningModule):
             for bs in range(B):
                 self.render.rendering_for_fid(
                     self.out_dir,
-                    "{}_b{}_ind{}".format(
-                        "val", str(batch_idx + 1), str(bs + 1)
-                    ),
+                    "{}_b{}_ind{}".format("val", str(batch_idx + 1), str(bs + 1)),
                     listener_3dmm_out[bs],
                     speaker_video_clip[bs],
                     listener_references[bs],
@@ -214,63 +201,68 @@ class ModelLightning(pl.LightningModule):
         if dataloader_idx < 1:
             self.listener_emotion_gt_list.append(listener_emotion.cpu())
             self.speaker_emotion_list.append(speaker_emotion.cpu())
-    
+
     def on_test_end(self) -> None:
         listener_emotion_pred = torch.cat(self.listener_emotion_pred_list, dim=0)
         listener_emotion_gt = torch.cat(self.listener_emotion_gt_list, dim=0)
         speaker_emotion_gt = torch.cat(self.speaker_emotion_list, dim=0)
         self.all_listener_emotion_pred_list.append(listener_emotion_pred.unsqueeze(1))
 
-        all_listener_emotion_pred = torch.cat(self.all_listener_emotion_pred_list, dim=1)
-        
+        all_listener_emotion_pred = torch.cat(
+            self.all_listener_emotion_pred_list, dim=1
+        )
+
         print("listener_emotion_pred.shape", listener_emotion_pred.shape)
         print("listener_emotion_gt.shape", listener_emotion_gt.shape)
         print("speaker_emotion_gt.shape", speaker_emotion_gt.shape)
         print("all_listener_emotion_pred.shape", all_listener_emotion_pred.shape)
-        
-        torch.save(listener_emotion_pred, os.path.join(self.out_dir, "listener_emotion_pred.pt"))
-        torch.save(listener_emotion_gt, os.path.join(self.out_dir, "listener_emotion_gt.pt"))
-        torch.save(speaker_emotion_gt, os.path.join(self.out_dir, "speaker_emotion_gt.pt"))
-        torch.save(all_listener_emotion_pred, os.path.join(self.out_dir, "all_listener_emotion_pred.pt"))
-        
+
+        torch.save(
+            listener_emotion_pred,
+            os.path.join(self.out_dir, "listener_emotion_pred.pt"),
+        )
+        torch.save(
+            listener_emotion_gt, os.path.join(self.out_dir, "listener_emotion_gt.pt")
+        )
+        torch.save(
+            speaker_emotion_gt, os.path.join(self.out_dir, "speaker_emotion_gt.pt")
+        )
+        torch.save(
+            all_listener_emotion_pred,
+            os.path.join(self.out_dir, "all_listener_emotion_pred.pt"),
+        )
+
         p = args.num_workers
-        
-        N = speaker_emotion_gt.shape[0]
-        clip_length = speaker_emotion_gt.shape[1]
-        emotion_dim = speaker_emotion_gt.shape[2]
-        
-        reshaped_all_listener_emotion_pred = all_listener_emotion_pred.reshape(N, -1, clip_length, emotion_dim)
 
         # If you have problems running function compute_TLCC_mp, please replace this function with function compute_TLCC
-        TLCC = compute_TLCC_mp(all_listener_emotion_pred, speaker_emotion_gt, 
-                            p=p
-                            )
+        TLCC = compute_TLCC_mp(all_listener_emotion_pred, speaker_emotion_gt, p=p)
 
         # If you have problems running function compute_FRC_mp, please replace this function with function compute_FRC
         FRC = compute_FRC_mp(
-            args, all_listener_emotion_pred, listener_emotion_gt, val_test="val", 
-            p=p
+            args, all_listener_emotion_pred, listener_emotion_gt, val_test="val", p=p
         )
 
         # If you have problems running function compute_FRD_mp, please replace this function with function compute_FRD
         FRD = compute_FRD_mp(
-            args, all_listener_emotion_pred, listener_emotion_gt, val_test="val", 
-            p=p
+            args, all_listener_emotion_pred, listener_emotion_gt, val_test="val", p=p
         )
 
         FRDvs = compute_FRDvs(all_listener_emotion_pred)
         FRVar = compute_FRVar(all_listener_emotion_pred)
         smse = compute_s_mse(all_listener_emotion_pred)
-        
-        
-        self.logger.log_metrics({
-            "TLCC": TLCC, 
-            "FRC": FRC, 
-            "FRD": FRD, 
-            "FRDvs": FRDvs, 
-            "FRVar": FRVar, 
-            "s_mse": smse})
-        
+        FRRea = compute_fid(self.out_dir, device=self.device)
+
+        self.logger.log_metrics(
+            {
+                "TLCC": TLCC,
+                "FRC": FRC,
+                "FRD": FRD,
+                "FRDvs": FRDvs,
+                "FRVar": FRVar,
+                "s_mse": smse,
+                "FRRea": FRRea,
+            }
+        )
 
     def _common_step(self, batch, batch_idx):
         (
@@ -318,7 +310,7 @@ if __name__ == "__main__":
     from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
     from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
-    from config import ACCELERATOR, DEVICES
+    # from config import ACCELERATOR, DEVICES
     from model import TransformerVAE
     from train import parse_arg
 
@@ -326,21 +318,27 @@ if __name__ == "__main__":
     seed_everything(42, workers=True)
 
     args = parse_arg()
-        
-    if args.wandb:
-        wandb.init(project="react-baseline",)
-        logger = WandbLogger(project="react-baseline")
-        
-    else:
-        logger = TensorBoardLogger(args.out_dir, name="react-baseline")
     
+    # args.dataset_path="/home/tien/playground_facereconstruction/data/react_2024"
+    # args.online = True
+    args.test_extend_factor = 10
+    # args.debug = False
+    # args.window_size = 128
+    # args.wandb = True
+    
+    if args.wandb:
+        wandb.init(
+            project="react-baseline",
+        )
+        logger = WandbLogger(project="react-baseline")
+
+    else:
+        logger = TensorBoardLogger(args.outdir, name="react-baseline")
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.outdir,
         monitor="val_loss",
     )
-
-    args.test_extend_factor = 10
-
 
     pmt_model = TransformerVAE(
         img_size=args.img_size,
@@ -353,10 +351,9 @@ if __name__ == "__main__":
         window_size=args.window_size,
         device=args.device,
     )
-    
 
     criterion = VAELoss(args.kl_p)
-    
+
     render = Render("cuda")
 
     datamodule = ReactDataModule(conf=args)
@@ -372,12 +369,12 @@ if __name__ == "__main__":
     )
 
     trainer = pl.Trainer(
-        accelerator=ACCELERATOR,
+        accelerator=args.device,
         # strategy='auto',
-        devices=DEVICES,
+        devices=args.gpu_ids,
         min_epochs=1,
         max_epochs=100,
-        # precision=PRECISION,
+        precision=args.precision,
         callbacks=[EarlyStopping(monitor="val_loss", patience=5), checkpoint_callback],
         logger=logger,
         check_val_every_n_epoch=args.val_epoch,
@@ -385,7 +382,8 @@ if __name__ == "__main__":
         fast_dev_run=args.debug,
         # overfit_batches=1,
         # deterministic=True,
-        enable_checkpointing=True
+        enable_checkpointing=True,
+        accumulate_grad_batches=4,
     )
     # trainer.tune(model, datamodule=datamodule)
 

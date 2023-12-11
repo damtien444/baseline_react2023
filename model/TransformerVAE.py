@@ -303,6 +303,8 @@ class TransformerVAE(nn.Module):
             )
 
             for i in range(0, period):
+                torch.cuda.empty_cache()
+                
                 speaker_video_, speaker_audio_ = (
                     speaker_video[:, : (i + 1) * self.window_size],
                     speaker_audio[:, : (i + 1) * self.window_size],
@@ -326,7 +328,7 @@ class TransformerVAE(nn.Module):
                     current_reaction_3dmm, current_reaction_emotion = (
                         reaction_3dmm[:, i * self.window_size :],
                         reaction_emotion[:, i * self.window_size :],
-                    )
+                    ) 
                     (
                         listener_3dmm_out,
                         listener_emotion_out,
